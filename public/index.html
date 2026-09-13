@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>ukn</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: -apple-system, system-ui, sans-serif; background: #0b0b0d; color: #eaeaea; max-width: 720px; margin: 0 auto; padding: 24px 16px 100px; }
+  h1 { font-size: 18px; font-weight: 600; opacity: .8; }
+  #log { display: flex; flex-direction: column; gap: 16px; margin-top: 24px; }
+  .bubble { background: #17171b; border-radius: 12px; padding: 12px 14px; }
+  .user { align-self: flex-end; background: #2a4d3a; }
+  .status { opacity: .6; font-size: 13px; }
+  .bubble img, .bubble video { max-width: 100%; border-radius: 8px; margin-top: 8px; display: block; }
+  form { position: fixed; bottom: 0; left: 0; right: 0; display: flex; gap: 8px; padding: 12px; background: #0b0b0d; border-top: 1px solid #222; }
+  input { flex: 1; background: #17171b; border: 1px solid #333; color: #eee; padding: 12px; border-radius: 8px; font-size: 15px; }
+  button { background: #3a6f4d; border: none; color: white; padding: 0 18px; border-radius: 8px; font-size: 15px; }
+  button:disabled { opacity: .5; }
+</style>
+</head>
+<body>
+  <h1>ukn — universal visual agent</h1>
+  <div id="log"></div>
+
+  <form id="f">
+    <input id="prompt" autocomplete="off" placeholder='e.g. "go to youtube, search lofi hip hop, record 15 seconds"' />
+    <button id="send">Send</button>
+  </form>
+
+<script>
+const log = document.getElementById('log');
+const form = document.getElementById('f');
+const input = document.getElementById('prompt');
+const sendBtn = document.getElementById('send');
+
+function addBubble(text, cls) {
+  const div = document.createElement('div');
+  div.className = 'bubble ' + (cls || '');
+  div.textContent = text;
+  log.appendChild(div);
+  window.scrollTo(0, document.body.scrollHeight);
+  return div;
+}
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const prompt = input.value.trim();
+  if (!prompt) return;
+  input.value = '';
+  addBubble(prompt, 'user');
+  const status = addBubble('working on it…', 'status');
+  sendBtn.disabled = true;
+
+  try {
+    const r = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+    });
+    const data = await r.json();
+    status.remove();
+
+    if (!data.ok) {
+      addBubble('Error: ' + data.error);
+    } else {
+      const bubble = addBubble(data.goal || 'done');
+      const media = document.createElement(data.type === 'video' ? 'video' : 'img');
+      media.src = data.url;
+      if (data.type === 'video') { media.controls = true; media.autoplay = false; }
+      bubble.appendChild(media);
+    }
+  } catch (err) {
+    status.remove();
+    addBubble('Request failed: ' + err.message);
+  } finally {
+    sendBtn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
