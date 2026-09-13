@@ -18,20 +18,24 @@ function browserlessWsEndpoint() {
 
 async function dismissCommonConsentDialogs(page) {
   // Best-effort: click a common cookie/consent "accept" button if present,
-  // without failing the run if none exists.
+  // without failing the run if none exists. Google properties (including
+  // YouTube) often show consent.google.com interstitials with these labels.
   const candidates = [
+    'button:has-text("Accept all")',
+    'button:has-text("I agree")',
+    'button:has-text("Accept cookies")',
+    'button:has-text("Reject all")',
+    'form[action*="consent"] button',
+    '[aria-label="Accept all"]',
     "text=Accept all",
     "text=I agree",
-    "text=Accept cookies",
-    "text=Reject all",
-    'button[aria-label="Accept all"]',
   ];
   for (const sel of candidates) {
     try {
       const el = page.locator(sel).first();
-      if (await el.isVisible({ timeout: 1000 })) {
+      if (await el.isVisible({ timeout: 1500 })) {
         await el.click({ timeout: 2000 });
-        await page.waitForTimeout(500);
+        await page.waitForTimeout(800);
         return;
       }
     } catch {
@@ -92,6 +96,18 @@ async function executePlan(plan, jobId) {
   }
 
   const context = await browser.newContext(contextOptions);
+
+  // Pre-accept Google's cookie-consent wall (shows up on youtube.com, google.com,
+  // etc. especially from datacenter IPs) so it never blocks navigation at all.
+  try {
+    await context.addCookies([
+      { name: "CONSENT", value: "YES+1", domain: ".google.com", path: "/" },
+      { name: "CONSENT", value: "YES+1", domain: ".youtube.com", path: "/" },
+    ]);
+  } catch {
+    // Non-fatal — the click-based dismissal in runStep is still a fallback.
+  }
+
   const page = await context.newPage();
 
   let resultPath;
