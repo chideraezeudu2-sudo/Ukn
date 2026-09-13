@@ -16,6 +16,19 @@ const { executePlan, OUTPUT_DIR } = require("./browser");
 const PORT = process.env.PORT || 3000;
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`;
 
+function buildErrorResponse(jobId, err) {
+  const content = [{ type: "text", text: `Error: ${err.message}` }];
+  const debugPath = path.join(OUTPUT_DIR, `${jobId}-debug.png`);
+  if (fs.existsSync(debugPath)) {
+    content.push({
+      type: "image",
+      data: fs.readFileSync(debugPath).toString("base64"),
+      mimeType: "image/png",
+    });
+  }
+  return { isError: true, content };
+}
+
 function buildServer() {
   const server = new McpServer({ name: "ukn", version: "0.2.0" });
 
@@ -35,18 +48,22 @@ function buildServer() {
     },
     async ({ instruction }) => {
       const jobId = crypto.randomUUID();
-      const plan = await planActions(instruction);
-      plan.output = "screenshot"; // force, regardless of what the planner guessed
-      const result = await executePlan(plan, jobId);
-      const url = `${PUBLIC_BASE_URL}/outputs/${path.basename(result.filePath)}`;
-      const imageBase64 = fs.readFileSync(result.filePath).toString("base64");
+      try {
+        const plan = await planActions(instruction);
+        plan.output = "screenshot"; // force, regardless of what the planner guessed
+        const result = await executePlan(plan, jobId);
+        const url = `${PUBLIC_BASE_URL}/outputs/${path.basename(result.filePath)}`;
+        const imageBase64 = fs.readFileSync(result.filePath).toString("base64");
 
-      return {
-        content: [
-          { type: "text", text: `Screenshot captured. Goal: ${plan.goal}\nURL: ${url}` },
-          { type: "image", data: imageBase64, mimeType: "image/png" },
-        ],
-      };
+        return {
+          content: [
+            { type: "text", text: `Screenshot captured. Goal: ${plan.goal}\nURL: ${url}` },
+            { type: "image", data: imageBase64, mimeType: "image/png" },
+          ],
+        };
+      } catch (err) {
+        return buildErrorResponse(jobId, err);
+      }
     }
   );
 
@@ -73,20 +90,24 @@ function buildServer() {
     },
     async ({ instruction, seconds }) => {
       const jobId = crypto.randomUUID();
-      const plan = await planActions(instruction);
-      plan.output = "video";
-      if (seconds) plan.record_seconds = Math.min(Math.max(seconds, 3), 60);
-      const result = await executePlan(plan, jobId);
-      const url = `${PUBLIC_BASE_URL}/outputs/${path.basename(result.filePath)}`;
+      try {
+        const plan = await planActions(instruction);
+        plan.output = "video";
+        if (seconds) plan.record_seconds = Math.min(Math.max(seconds, 3), 60);
+        const result = await executePlan(plan, jobId);
+        const url = `${PUBLIC_BASE_URL}/outputs/${path.basename(result.filePath)}`;
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Video recorded (${plan.record_seconds}s). Goal: ${plan.goal}\nDownload/view: ${url}`,
-          },
-        ],
-      };
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Video recorded (${plan.record_seconds}s). Goal: ${plan.goal}\nDownload/view: ${url}`,
+            },
+          ],
+        };
+      } catch (err) {
+        return buildErrorResponse(jobId, err);
+      }
     }
   );
 
