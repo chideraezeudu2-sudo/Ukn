@@ -135,6 +135,18 @@ function buildServer() {
                   `${(MAX_INLINE_MEDIA_BYTES / 1048576).toFixed(0)} MB inline limit — open the URL above.)`),
           },
         ];
+
+        // A poster frame is included because client support for embedded video
+        // blobs is inconsistent — this way even a client that ignores the
+        // resource block still shows a still of what was recorded.
+        if (result.posterPath && fs.existsSync(result.posterPath)) {
+          content.push({
+            type: "image",
+            data: fs.readFileSync(result.posterPath).toString("base64"),
+            mimeType: "image/png",
+          });
+        }
+
         if (block) content.push(block);
 
         return { content };

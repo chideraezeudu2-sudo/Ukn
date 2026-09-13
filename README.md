@@ -13,13 +13,19 @@ the web.
   as needed, then returns a full-page screenshot as an inline image plus a
   URL.
 - **`record_video(instruction, seconds?)`** — same idea, but records video
-  for up to 60 seconds. The clip is returned **inline** as an embedded binary
-  resource (MCP has no dedicated video content type, so it's sent as
-  `type: "resource"` with a base64 `video/webm` blob) whenever it fits in the
-  inline size limit — plus a public URL that always works as a fallback.
+  for up to 60 seconds. Each `record_video` result carries three
+  representations, so it lands usefully regardless of what the client
+  renders:
 
-  Clips larger than `MAX_INLINE_MEDIA_BYTES` (default 8 MB) are not embedded,
-  to avoid blowing up the MCP response; you still get the URL in that case.
+  1. a **text block** with the public URL (works everywhere),
+  2. a **poster frame** as an inline `image` (rendered by essentially every
+     multimodal client), and
+  3. the **clip itself** as an embedded binary resource — MCP has no video
+     content type, so it's sent as `type: "resource"` with a base64
+     `video/webm` blob — playable in clients that render embedded resources.
+
+  Clips larger than `MAX_INLINE_MEDIA_BYTES` (default 8 MB) skip the embed and
+  return the poster + URL instead, so the response stays a sane size.
 
 Behind the scenes: **Groq** (`agent.js`) turns your instruction into a short
 JSON plan of browser steps (goto/click/type/scroll/wait), and
@@ -85,5 +91,10 @@ Long-running process, not serverless — video recording can take up to 60s.
 - **Copyright**: recording playback of copyrighted video content for
   personal use is a different risk profile than offering that as a feature
   to other people via an API/product.
+- **Client support varies for inline video.** MCP has no video content type,
+  so the playable clip rides in an embedded `resource` block and some clients
+  won't render it. That's why every video result also includes a poster frame
+  and a URL — you'll always get *something* visible, even if a given client
+  can't play the clip inline.
 - **Selectors**: the planner guesses at selectors without seeing the live
   DOM, so unusual site markup can cause a step to fail.

@@ -141,6 +141,7 @@ async function executePlan(plan, jobId) {
   const page = await context.newPage();
 
   let resultPath;
+  let posterPath;
   try {
     for (const step of plan.steps) {
       try {
@@ -166,6 +167,15 @@ async function executePlan(plan, jobId) {
       // Let the recording run for the requested duration after the scripted
       // steps finish, so animations/playback have time to be captured.
       await page.waitForTimeout(plan.record_seconds * 1000);
+      // Capture a still as well. Many MCP clients don't render embedded video
+      // blobs at all, so this guarantees something visual reaches the chat
+      // alongside the downloadable clip.
+      posterPath = path.join(OUTPUT_DIR, `${jobId}-poster.png`);
+      try {
+        await page.screenshot({ path: posterPath });
+      } catch {
+        posterPath = undefined;
+      }
     } else {
       resultPath = path.join(OUTPUT_DIR, `${jobId}.png`);
       await page.screenshot({ path: resultPath, fullPage: true });
@@ -184,7 +194,7 @@ async function executePlan(plan, jobId) {
     fs.rmSync(videoDir, { recursive: true, force: true });
   }
 
-  return { type: plan.output, filePath: resultPath };
+  return { type: plan.output, filePath: resultPath, posterPath };
 }
 
 module.exports = { executePlan, OUTPUT_DIR, runStep };
