@@ -44,6 +44,38 @@ async function dismissCommonConsentDialogs(page) {
   }
 }
 
+// Known-good fallback selectors per site, tried in order if the planner's
+// guessed selector doesn't show up in time. Keyed by a substring of the URL.
+const SEARCH_INPUT_FALLBACKS = [
+  { match: "youtube.com", selectors: ["input#search", 'input[name="search_query"]', "ytd-searchbox input"] },
+  { match: "google.com", selectors: ['textarea[name="q"]', 'input[name="q"]'] },
+  { match: "amazon.com", selectors: ["input#twotabsearchtextbox", 'input[name="field-keywords"]'] },
+];
+
+function fallbackSelectorsFor(page, originalSelector) {
+  const url = page.url();
+  const site = SEARCH_INPUT_FALLBACKS.find((s) => url.includes(s.match));
+  const list = site ? site.selectors : [];
+  // Try the planner's own selector first, then the known-good list, deduped.
+  return [originalSelector, ...list].filter((s, i, arr) => arr.indexOf(s) === i);
+}
+
+async function findVisibleLocator(page, selector, timeoutMsTotal) {
+  const candidates = fallbackSelectorsFor(page, selector);
+  const perTry = Math.max(2000, Math.floor(timeoutMsTotal / candidates.length));
+  let lastErr;
+  for (const sel of candidates) {
+    try {
+      const locator = page.locator(sel).first();
+      await locator.waitFor({ state: "visible", timeout: perTry });
+      return locator;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr;
+}
+
 async function runStep(page, step) {
   switch (step.action) {
     case "goto":
@@ -56,14 +88,12 @@ async function runStep(page, step) {
       await dismissCommonConsentDialogs(page);
       break;
     case "click": {
-      const locator = page.locator(step.selector).first();
-      await locator.waitFor({ state: "visible", timeout: 15000 });
+      const locator = await findVisibleLocator(page, step.selector, 15000);
       await locator.click({ timeout: 15000 });
       break;
     }
     case "type": {
-      const locator = page.locator(step.selector).first();
-      await locator.waitFor({ state: "visible", timeout: 15000 });
+      const locator = await findVisibleLocator(page, step.selector, 15000);
       await locator.fill(step.text, { timeout: 15000 });
       break;
     }
