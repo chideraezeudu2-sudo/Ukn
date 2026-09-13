@@ -16,6 +16,32 @@ const { executePlan, OUTPUT_DIR } = require("./browser");
 const PORT = process.env.PORT || 3000;
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`;
 
+// MCP has no dedicated "video" content type (only text/image/audio/resource),
+// so an inline clip is returned as an embedded binary resource carrying a
+// base64 blob. Clients that don't render embedded resources still receive the
+// public URL in the text block, so nothing is lost either way.
+const MAX_INLINE_MEDIA_BYTES = Number(process.env.MAX_INLINE_MEDIA_BYTES || 8 * 1024 * 1024);
+
+function publicUrl(filePath) {
+  return `${PUBLIC_BASE_URL}/outputs/${path.basename(filePath)}`;
+}
+
+function inlineVideoBlock(filePath) {
+  const { size } = fs.statSync(filePath);
+  if (size > MAX_INLINE_MEDIA_BYTES) return { block: null, size };
+  return {
+    block: {
+      type: "resource",
+      resource: {
+        uri: publicUrl(filePath),
+        mimeType: "video/webm",
+        blob: fs.readFileSync(filePath).toString("base64"),
+      },
+    },
+    size,
+  };
+}
+
 function buildErrorResponse(jobId, err) {
   const content = [{ type: "text", text: `Error: ${err.message}` }];
   const debugPath = path.join(OUTPUT_DIR, `${jobId}-debug.png`);
@@ -52,7 +78,7 @@ function buildServer() {
         const plan = await planActions(instruction);
         plan.output = "screenshot"; // force, regardless of what the planner guessed
         const result = await executePlan(plan, jobId);
-        const url = `${PUBLIC_BASE_URL}/outputs/${path.basename(result.filePath)}`;
+        const url = publicUrl(result.filePath);
         const imageBase64 = fs.readFileSync(result.filePath).toString("base64");
 
         return {
@@ -75,9 +101,9 @@ function buildServer() {
         "Send a natural-language instruction describing what to do/watch on the web " +
         "(e.g. 'go to youtube.com, search for lofi hip hop radio, and record the " +
         "first 15 seconds'). A real cloud browser navigates and interacts as " +
-        "needed while recording, then returns a downloadable video URL. Videos " +
-        "are not embedded inline (too large) — use the returned URL to view or " +
-        "download the clip.",
+        "needed while recording. The clip is returned inline as an embedded video " +
+        "when it fits within the inline size limit, and always as a downloadable " +
+        "URL so it can be viewed or downloaded either way.",
       inputSchema: {
         instruction: z.string().describe("What to do / watch before and during the recording"),
         seconds: z
@@ -95,16 +121,35 @@ function buildServer() {
         plan.output = "video";
         if (seconds) plan.record_seconds = Math.min(Math.max(seconds, 3), 60);
         const result = await executePlan(plan, jobId);
-        const url = `${PUBLIC_BASE_URL}/outputs/${path.basename(result.filePath)}`;
+        const url = publicUrl(result.filePath);
+        const { block, size } = inlineVideoBlock(result.filePath);
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Video recorded (${plan.record_seconds}s). Goal: ${plan.goal}\nDownload/view: ${url}`,
-            },
-          ],
-        };
+        const content = [
+          {
+            type: "text",
+            text:
+              `Video recorded (${plan.record_seconds}s). Goal: ${plan.goal}\nURL: ${url}` +
+              (block
+                ? ""
+                : `\n(Clip is ${(size / 1048576).toFixed(1)} MB, over the ` +
+                  `${(MAX_INLINE_MEDIA_BYTES / 1048576).toFixed(0)} MB inline limit — open the URL above.)`),
+          },
+        ];
+
+        // A poster frame is included because client support for embedded video
+        // blobs is inconsistent — this way even a client that ignores the
+        // resource block still shows a still of what was recorded.
+        if (result.posterPath && fs.existsSync(result.posterPath)) {
+          content.push({
+            type: "image",
+            data: fs.readFileSync(result.posterPath).toString("base64"),
+            mimeType: "image/png",
+          });
+        }
+
+        if (block) content.push(block);
+
+        return { content };
       } catch (err) {
         return buildErrorResponse(jobId, err);
       }
