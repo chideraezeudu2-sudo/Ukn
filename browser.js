@@ -89,4 +89,4 @@ async function executePlan(plan, jobId) {
   return { type: plan.output, filePath: resultPath };
 }
 
-module.exports = { executePlan, OUTPUT_DIR };
+module.exports = { executePlan, OUTPUT_DIR, runStep };

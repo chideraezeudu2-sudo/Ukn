@@ -2,19 +2,22 @@
   "name": "ukn",
   "version": "0.1.0",
   "description": "Universal visual AI agent: chat with an agent that browses the web and returns screenshots and screen-recorded video clips.",
-  "main": "server.js",
+  "main": "mcp-server.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node server.js"
+    "start": "node mcp-server.js",
+    "start:chat-demo": "node server.js"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "groq-sdk": "^0.7.0",
     "multer": "^1.4.5-lts.1",
-    "playwright-core": "^1.47.0"
+    "playwright-core": "^1.47.0",
+    "zod": "^4.6.4"
   }
 }

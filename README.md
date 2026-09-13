@@ -1,65 +1,83 @@
-# ukn — universal visual AI agent (v0)
+# ukn — an MCP tool server for visual browser actions
 
-A chat interface where you type a natural-language request and an AI agent
-drives a real cloud browser to fulfill it — returning either a **screenshot**
-or a **screen-recorded video clip** instead of just text.
+This is **not** a chat app. It's a small MCP (Model Context Protocol) server
+that exposes two tools — `take_screenshot` and `record_video` — so that AI
+assistants you already use (Claude, OpenHands, etc.) can call them directly
+and hand you back real screenshots and video clips of things happening on
+the web.
 
-Example prompts:
-- "Go to YouTube, search lofi hip hop radio, and record the first 15 seconds"
-- "Go to Amazon and show me a screenshot of the product page for [item]"
+## What it exposes
 
-## How it works
+- **`take_screenshot(instruction)`** — e.g. "go to youtube.com and search
+  lofi hip hop radio". A cloud browser (via Browserless) navigates/interacts
+  as needed, then returns a full-page screenshot as an inline image plus a
+  URL.
+- **`record_video(instruction, seconds?)`** — same idea, but records video
+  for up to 60 seconds and returns a downloadable URL (video isn't sent
+  inline, just linked).
 
-1. **Groq** (`agent.js`) turns your prompt into a small JSON plan: a goal,
-   an output type (`screenshot` or `video`), and a list of browser steps
-   (goto / click / type / scroll / wait / press).
-2. **Playwright + Browserless** (`browser.js`) connects to a remote Chromium
-   instance over CDP, executes the plan, and either takes a full-page
-   screenshot or records video for the requested duration.
-3. **Express** (`server.js`) exposes `/api/chat` and serves the resulting
-   file back to the chat UI (`public/index.html`).
+Behind the scenes: **Groq** (`agent.js`) turns your instruction into a short
+JSON plan of browser steps (goto/click/type/scroll/wait), and
+**Playwright + Browserless** (`browser.js`) executes it in a real remote
+Chromium instance.
 
-## v0 scope (intentional)
+## Connecting this to Claude
 
-This is deliberately narrow right now:
-- Two output types only: screenshot, video. No live-session streaming, no
-  file-download extraction yet — add those later if you actually reach for
-  them.
-- No auth, no user accounts, no persistence beyond local files in
-  `outputs/`. This is a personal workflow tool, not a multi-user product.
-- No login/paywall bypassing — the planner is explicitly told not to invent
-  credentials.
+Claude.ai / Claude Desktop support adding **custom remote MCP connectors**.
+Once this server is deployed (see below), add it as a connector using its
+`/mcp` endpoint, e.g.:
+
+```
+https://ukn-agent.onrender.com/mcp
+```
+
+Once connected, you can just ask Claude in chat things like "take a
+screenshot of youtube.com" and it will call the tool directly and show you
+the result — no separate app to open.
+
+## Connecting this to OpenHands
+
+OpenHands supports MCP tool servers too. Point it at the same
+`https://ukn-agent.onrender.com/mcp` endpoint and it gains the same two
+tools — so it can screenshot or record the frontend it just built for you
+instead of you having to open a browser separately to check.
 
 ## Local setup
 
 ```bash
 cp .env.example .env   # fill in GROQ_API_KEY and BROWSERLESS_API_KEY
 npm install
-npm start
+npm start               # runs the MCP server on :3000, endpoint at /mcp
 ```
-
-Visit http://localhost:3000
 
 ## Deploying (Render)
 
-This needs a long-running process (not a serverless function) because video
-recording can take up to 60 seconds per request. Deploy as a Render **Web
-Service**:
+Long-running process, not serverless — video recording can take up to 60s.
 
 - Build command: `npm install`
 - Start command: `npm start`
-- Env vars: `GROQ_API_KEY`, `BROWSERLESS_API_KEY`
+- Env vars: `GROQ_API_KEY`, `BROWSERLESS_API_KEY`, `PUBLIC_BASE_URL` (set
+  this to your Render service's public URL, e.g.
+  `https://ukn-agent.onrender.com`, so returned links are correct)
 
-## Notes / things to watch
+## v0 scope (intentional)
+
+- Screenshot + video only. No live-session streaming, no file-download
+  extraction yet.
+- No auth — this is a personal tool. Don't share the `/mcp` URL publicly;
+  anyone with it can drive your Browserless account.
+- No login/paywall bypassing — the planner is explicitly told not to invent
+  credentials.
+- A legacy standalone chat demo (the original v0 web app) is still in this
+  repo as `server.js` (`npm run start:chat-demo`) if you ever want a
+  browser-based fallback, but it's not the primary interface anymore.
+
+## Notes
 
 - **Cost**: video jobs hold a remote browser session open for the full
-  recording duration — this is the expensive part of the product. Screenshot
-  jobs are cheap and fast by comparison.
-- **Copyright**: recording playback of copyrighted video content (e.g. a
-  specific YouTube video) for personal use is a different risk profile than
-  offering that as a feature to other people via an API/product. Keep that
-  distinction in mind if this ever grows beyond a personal tool.
-- **Selectors**: the planner guesses at CSS/text selectors without seeing the
-  live DOM, so some prompts will fail on sites with unusual markup. This is
-  a known v0 limitation — worth watching for common failure patterns once
-  you're using it daily.
+  recording duration — this is the expensive part. Screenshots are cheap.
+- **Copyright**: recording playback of copyrighted video content for
+  personal use is a different risk profile than offering that as a feature
+  to other people via an API/product.
+- **Selectors**: the planner guesses at selectors without seeing the live
+  DOM, so unusual site markup can cause a step to fail.
