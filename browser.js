@@ -97,7 +97,23 @@ async function executePlan(plan, jobId) {
   let resultPath;
   try {
     for (const step of plan.steps) {
-      await runStep(page, step);
+      try {
+        await runStep(page, step);
+      } catch (stepErr) {
+        // Capture what the page actually looked like at the point of failure,
+        // so failures are diagnosable instead of a bare selector timeout.
+        const debugPath = path.join(OUTPUT_DIR, `${jobId}-debug.png`);
+        try {
+          await page.screenshot({ path: debugPath, fullPage: true });
+        } catch {
+          // If even the debug screenshot fails, proceed with the original error.
+        }
+        const enriched = new Error(
+          `Step failed (${step.action}${step.selector ? " " + step.selector : ""}): ${stepErr.message}` +
+            (fs.existsSync(debugPath) ? ` | debug screenshot: /outputs/${jobId}-debug.png` : "")
+        );
+        throw enriched;
+      }
     }
 
     if (plan.output === "video") {
