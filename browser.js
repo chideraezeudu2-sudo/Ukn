@@ -16,17 +16,53 @@ function browserlessWsEndpoint() {
   );
 }
 
+async function dismissCommonConsentDialogs(page) {
+  // Best-effort: click a common cookie/consent "accept" button if present,
+  // without failing the run if none exists.
+  const candidates = [
+    "text=Accept all",
+    "text=I agree",
+    "text=Accept cookies",
+    "text=Reject all",
+    'button[aria-label="Accept all"]',
+  ];
+  for (const sel of candidates) {
+    try {
+      const el = page.locator(sel).first();
+      if (await el.isVisible({ timeout: 1000 })) {
+        await el.click({ timeout: 2000 });
+        await page.waitForTimeout(500);
+        return;
+      }
+    } catch {
+      // Selector not present or not clickable in time — ignore and continue.
+    }
+  }
+}
+
 async function runStep(page, step) {
   switch (step.action) {
     case "goto":
       await page.goto(step.url, { waitUntil: "domcontentloaded", timeout: 30000 });
+      try {
+        await page.waitForLoadState("networkidle", { timeout: 8000 });
+      } catch {
+        // Some pages never go fully idle (ads, polling widgets) — fine to proceed.
+      }
+      await dismissCommonConsentDialogs(page);
       break;
-    case "click":
-      await page.click(step.selector, { timeout: 10000 });
+    case "click": {
+      const locator = page.locator(step.selector).first();
+      await locator.waitFor({ state: "visible", timeout: 15000 });
+      await locator.click({ timeout: 15000 });
       break;
-    case "type":
-      await page.fill(step.selector, step.text, { timeout: 10000 });
+    }
+    case "type": {
+      const locator = page.locator(step.selector).first();
+      await locator.waitFor({ state: "visible", timeout: 15000 });
+      await locator.fill(step.text, { timeout: 15000 });
       break;
+    }
     case "press":
       await page.keyboard.press(step.key);
       break;

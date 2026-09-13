@@ -24,10 +24,20 @@ commentary) with this exact shape:
 }
 
 Rules:
-- Prefer Playwright-style "text=" selectors when targeting visible text/buttons
-  (e.g. "text=Search", "text=Sign in") since you cannot see the live DOM.
+- Prefer Playwright-style "text=" selectors when targeting visible buttons/
+  links (e.g. "text=Search", "text=Sign in") since you cannot see the live
+  DOM. For text INPUT fields, prefer stable attribute selectors over guessing
+  visible text, e.g.:
+  - YouTube search box: 'input#search' with a fallback of 'input[name="search_query"]'
+  - Google search box: 'textarea[name="q"]' (Google uses a textarea, not input)
+  - Amazon search box: 'input#twotabsearchtextbox'
+  When unsure, use a broad attribute selector like 'input[type="search"]' or
+  'input[name*="search" i]' rather than an id you're not confident about.
 - Always start with a "goto" step to a real URL. Infer the most sensible
   starting URL from the request (e.g. youtube.com, amazon.com, google.com).
+- After typing into a search box, prefer a "press" step with key "Enter"
+  over trying to click a search button, since button selectors vary more
+  across sites than the Enter key does.
 - Keep the step list short (3-8 steps). Insert small "wait" steps (500-1500ms)
   after navigation or clicks so the page can load before the next action.
 - If the request just says to "look at" or "check out" or "show me" a page
