@@ -13,8 +13,13 @@ the web.
   as needed, then returns a full-page screenshot as an inline image plus a
   URL.
 - **`record_video(instruction, seconds?)`** — same idea, but records video
-  for up to 60 seconds and returns a downloadable URL (video isn't sent
-  inline, just linked).
+  for up to 60 seconds. The clip is returned **inline** as an embedded binary
+  resource (MCP has no dedicated video content type, so it's sent as
+  `type: "resource"` with a base64 `video/webm` blob) whenever it fits in the
+  inline size limit — plus a public URL that always works as a fallback.
+
+  Clips larger than `MAX_INLINE_MEDIA_BYTES` (default 8 MB) are not embedded,
+  to avoid blowing up the MCP response; you still get the URL in that case.
 
 Behind the scenes: **Groq** (`agent.js`) turns your instruction into a short
 JSON plan of browser steps (goto/click/type/scroll/wait), and
@@ -58,7 +63,8 @@ Long-running process, not serverless — video recording can take up to 60s.
 - Start command: `npm start`
 - Env vars: `GROQ_API_KEY`, `BROWSERLESS_API_KEY`, `PUBLIC_BASE_URL` (set
   this to your Render service's public URL, e.g.
-  `https://ukn-agent.onrender.com`, so returned links are correct)
+  `https://ukn-agent.onrender.com`, so returned links are correct), and
+  optionally `MAX_INLINE_MEDIA_BYTES` to change the video embed threshold
 
 ## v0 scope (intentional)
 
